@@ -1,0 +1,1435 @@
+/********************************************************************
+    Module: FAT32_disk_management.h
+    Author: Brennan Couturier
+
+    Functions to read/write data on the disk
+********************************************************************/
+
+#ifndef FAT32_DM_H
+#define FAT32_DM_H
+
+#pragma region Read_Functions
+
+/********************************************************************
+Read sizeof(FAT32_BS) bytes from the provided file descriptor into
+	an allocated FAT32_BS struct. Sets the global boot sector reference
+	to point to this memory
+********************************************************************/
+void read_boot_sector();
+
+/********************************************************************
+Reads the FSInfo data into an allocated FAT32_FSInfo struct
+********************************************************************/
+void read_FS_info();
+
+/********************************************************************
+Reads the root directory into an allocated FAT32_Directory_Entry struct
+********************************************************************/
+void read_root_directory();
+
+/********************************************************************
+Searches the current directory for a file with the provided name
+    If the file is found, write the clusterchain to a file in memory
+********************************************************************/
+void download_file(char* file_name);
+
+#pragma endregion Read_Functions
+
+#pragma region Set_Functions
+
+/********************************************************************
+Searches the current directory for the specified directory
+    If it exists, get its cluster number and set the global variable
+********************************************************************/
+void change_directory(char* destination);
+
+#pragma endregion Set_Functions
+
+#endif/********************************************************************
+    Module: FAT32_helpers.h
+    Author: Brennan Couturier
+
+    Extra functions to perform tedious calculations
+********************************************************************/
+
+#ifndef FAT32_HELP_H
+#define FAT32_HELP_H
+
+#include <inttypes.h>
+#include <stdbool.h>
+
+#include "FAT32_structs_globals.h"
+
+#pragma region Get_Functions
+
+/********************************************************************
+Calculate how many root directory sectors there are. If FAT32 this 
+	will be 0, otherwise we should stop the program because we
+	aren't operating on FAT12/16.
+********************************************************************/
+uint16_t get_root_dir_sectors();
+
+/********************************************************************
+Calculate the sector number of the first data sector relative
+	to the sector that contains the BPB
+********************************************************************/
+uint32_t get_first_data_sector();
+
+/********************************************************************
+Calculate the first sector of a given cluster number
+********************************************************************/
+uint32_t get_first_sector_of_cluster(uint32_t cluster_number);
+
+/********************************************************************
+Calculate the number of sectors in the data region of the volume
+********************************************************************/
+uint32_t get_num_data_region_sectors();
+
+/********************************************************************
+Calculate the number of data clusters in total starting at cluster 2
+	This computation rounds down
+********************************************************************/
+uint32_t get_num_clusters();
+
+/********************************************************************
+Calculate FAT entry number for given cluster number N
+	This is the sector number of the FAT sector that contains the 
+	entry for cluster N in the first FAT
+********************************************************************/
+uint32_t get_FAT_sector_number_for_cluster(uint32_t cluster_number);
+
+/********************************************************************
+Calculate FAT entry offset value for given cluster number
+********************************************************************/
+uint32_t get_FAT_entry_offset_for_cluster(uint32_t cluster_number);
+
+/********************************************************************
+Fetch the contents of the given cluster's FAT entry
+********************************************************************/
+uint32_t get_FAT_entry_contents(uint32_t cluster_number);
+
+/********************************************************************
+Returns a string representing the FAT version we're using
+	"FAT12", "FAT16" or "FAT32"
+********************************************************************/
+char* get_FAT_type();
+
+#pragma endregion Get_Functions
+
+#pragma region Value_Check_Functions
+
+/********************************************************************
+Checks if the FAT entry is EOC or not
+********************************************************************/
+bool is_FAT_entry_EOC(uint32_t FAT_entry);
+
+#pragma endregion Value_Check_Functions
+
+#pragma region Clusterchain_Functions
+
+/********************************************************************
+This function builds a linked list of clusters. It starts at the
+	cluster specified by cluster_number, then adds clusters into
+	the list until it finds an EOC marker in the FAT. It then returns
+	a pointer to the head of this list
+********************************************************************/
+file_cluster_node* build_clusterchain(uint32_t cluster_number);
+
+/********************************************************************
+Print out all the cluster numbers in the chain, ending with EOC
+********************************************************************/
+void print_clusterchain(file_cluster_node* chain_head);
+
+/********************************************************************
+Read all the clusters into one bit char array (byte array), to be
+	formatted by the caller
+********************************************************************/
+uint8_t* read_clusterchain(file_cluster_node* chain_head);
+
+/********************************************************************
+Free all the nodes in the clusterchain
+********************************************************************/
+void free_clusterchain(file_cluster_node* chain_head);
+
+#pragma endregion Clusterchain_Functions
+
+#pragma region String_Trim_Functions
+
+/********************************************************************
+Gets rid of all the trailing whitespace in the file name
+********************************************************************/
+void trim_directory_name(char* name_in, char* name_out);
+
+/********************************************************************
+Gets rid of the whitespace between the file name and the extension,
+	replaces it with 1 '.'
+********************************************************************/
+void trim_file_name(char* name_in, char* name_out);
+
+#pragma endregion String_Trim_Functions
+
+#endif/********************************************************************
+    Module: FAT32_io.h
+    Author: Brennan Couturier
+
+    Functions for opening/closing files and printing information
+********************************************************************/
+
+#ifndef FAT32_IO_H
+#define FAT32_IO_H
+
+#pragma region File_Descriptor_Functions
+
+/********************************************************************
+Open the formatted FAT32 disk image for reading and writing, sets
+	the global disk_image_fd varible to this new file descriptor
+********************************************************************/
+void open_disk_image(char* disk_image_path_in);
+
+/********************************************************************
+Closes the disk image file descriptor that was opened at the beginning
+********************************************************************/
+void close_disk_image();
+
+#pragma endregion File_Descriptor_Functions
+
+#pragma region Printing_Functions
+
+/********************************************************************
+Prints out some values contained in the boot sector to a file
+	in the debug directory
+********************************************************************/
+void print_boot_sector_info();
+
+/********************************************************************
+Prints out information about the root directory, for debugging
+********************************************************************/
+void print_root_directory();
+
+/********************************************************************
+Prints out information about the current directory and all the files
+    and subfolders in it
+********************************************************************/
+void print_current_directory();
+
+#pragma endregion Printing_Functions
+
+#endif/********************************************************************
+    Module: FAT32_structs_globals.h
+    Author: Brennan Couturier
+
+    All the structs and global variables the program will use
+********************************************************************/
+
+#ifndef FAT32_SG_H
+#define FAT32_SG_H
+
+#include <inttypes.h>
+
+#define BS_OEMName_LENGTH 8
+#define BS_VolLab_LENGTH 11
+#define BS_FilSysType_LENGTH 8
+#define _FILE_OFFSET_BITS 64
+#define FAT_ENTRY_MASK 0x0FFFFFFF
+#define EOC_LOW_BOUND 0x0FFFFFF8 //If a FAT entry is >= EOC_LOW_BOUND, the entry is EOC
+#define FILE_OUTPUT_FOLDER "./files/"
+
+#pragma region Structs
+/********************************************************************
+Struct for FAT32 Boot Sector and BPB
+********************************************************************/
+#pragma pack(push)
+#pragma pack(1)
+typedef struct FAT32_BS_struct{
+    //Starting at offset (byte) 0
+    char BS_jmpBoot[3];
+    char BS_OEMName[BS_OEMName_LENGTH]; //"MSWIN4.1" for example
+    uint16_t BPB_BytesPerSec; //Dan: 512
+	uint8_t BPB_SecPerClus; //Dan: 8
+	uint16_t BPB_RsvdSecCnt; //non-zero, typically 32
+	uint8_t BPB_NumFATs; //Dan: 2
+	uint16_t BPB_RootEntCnt; //must be 0
+	uint16_t BPB_TotSec16; //must be 0
+	uint8_t BPB_Media; //Dan: 0xF8 Value here must be put in the low byte of the FAT[0] entry
+	uint16_t BPB_FATSz16; //must be 0
+	uint16_t BPB_SecPerTrk; //Dan: 63
+	uint16_t BPB_NumHeads; //Dan: 255
+	uint32_t BPB_HiddSec; //Dan: 62
+	uint32_t BPB_TotSec32; //non-zero, total count of sectors on volume
+
+    //Starting at offset (byte) 36
+	uint32_t BPB_FATSz32; //Dan: 15423 Number of bits occupied by one FAT
+	uint16_t BPB_ExtFlags; //Specific bits set as flags
+	uint8_t BPB_FSVerLow; //Dan: 0 Minor revision version number
+	uint8_t BPB_FSVerHigh; //Dan: 0 Major revision version number
+	uint32_t BPB_RootClus; //First cluster of root directory, usually 2
+	uint16_t BPB_FSInfo; //Sector number for FSINFO struct, usually 1
+	uint16_t BPB_BkBootSec; //Usually 6, other value not recommended
+	char BPB_reserved[12]; //Must never be accessed, always zeroed out
+	uint8_t BS_DrvNum; //"same as FAT12/16", no further explanation
+	uint8_t BS_Reserved1; //"same as FAT12/16", no further explanation
+	uint8_t BS_BootSig; //"same as FAT12/16", no further explanation
+	uint32_t BS_VolID; //"same as FAT12/16", no further explanation
+	char BS_VolLab[BS_VolLab_LENGTH]; //"same as FAT12/16", no further explanation
+	char BS_FilSysType[BS_FilSysType_LENGTH]; //"FAT32   ", 3 spaces
+	char BS_CodeReserved[420];
+	uint8_t BS_SigA; //Should be 0x55
+	uint8_t BS_SigB; //Should be 0xAA
+} FAT32_BS;
+#pragma pack(pop)
+
+/********************************************************************
+Struct for File Stystem Info 
+********************************************************************/
+#pragma pack(push)
+#pragma pack(1)
+typedef struct FAT32_FSInfo_struct{
+    uint32_t FSI_LeadSig; //Value 0x41615252
+    char FSI_Reserved1[480]; //Must never be accessed, always zeroed out
+    uint32_t FSI_StrucSig; //Value 0x61417272
+    uint32_t FSI_Free_Count; //If 0xFFFFFFFF, free count is unknown
+    uint32_t FSI_Nxt_Free; //If 0xFFFFFFFF, start search at cluster 2
+    char FSI_Reserved2[12]; //Must never be accessed, always zeroed out
+    uint32_t FSI_TrailSig; //Value 0xAA550000
+} FAT32_FSInfo;
+#pragma pack(pop)
+
+/********************************************************************
+Struct for each directory entry
+********************************************************************/
+#pragma pack(push)
+#pragma pack(1)
+typedef struct FAT32_Directory_Entry_struct{
+	char DIR_Name[11]; //short name, [0] cannot be 0x20 (space)
+	uint8_t DIR_Attr; //Upper 2 bits set to 0 when file is created, never used
+	uint8_t DIR_NTRes; //Set to 0 when file is created, never used
+	uint8_t DIR_CrtTimeTenth; //Millisecond stamp at file creation time, is a count of tenths of seconds
+	uint16_t DIR_CrtTime; //Time file was created
+	uint16_t DIR_CrtDate; //Date file was created
+	uint16_t DIR_LstAccDate; //Date of last read or write. If write, should be set to same date as DIR_WrtDate
+	uint16_t DIR_FstClusHI; //High word of this entry's first cluster number
+	uint16_t DIR_WrtTime; //Time of last write. File creation is considered a write
+	uint16_t DIR_WrtDate; //Date of last write. File creation is considered a write
+	uint16_t DIR_FstClusLO; //Low word of this entry's first cluster number
+	uint32_t DIR_FileSize; //32-bit DWORD holding this file's size in bytes
+} FAT32_Directory_Entry;
+#pragma pack(pop)
+
+/********************************************************************
+Linked list node to keep track of all the clusters in a file
+********************************************************************/
+#pragma pack(push)
+#pragma pack(1)
+typedef struct file_cluster_node_struct{
+	uint32_t cluster_number;
+	struct file_cluster_node_struct* next;
+} file_cluster_node;
+#pragma pack(pop)
+
+#pragma endregion Structs
+
+
+#pragma region Globals
+
+/********************************************************************
+Global variable used to store the disk image file descriptor
+********************************************************************/
+int disk_image_fd;
+
+/********************************************************************
+Path to diskimage from root directory (where makefile is)
+********************************************************************/
+char* disk_image_path;
+
+/********************************************************************
+Global reference to boot sector
+********************************************************************/
+FAT32_BS* boot_sector;
+
+/********************************************************************
+Global reference to file system sector
+********************************************************************/
+FAT32_FSInfo* fs_info_sector;
+
+/********************************************************************
+Global reference to root directory
+********************************************************************/
+FAT32_Directory_Entry* root_directory;
+
+/********************************************************************
+Global reference to the first cluster of the current directory
+********************************************************************/
+uint32_t current_directory_cluster;
+
+#pragma endregion Globals
+
+#endif/********************************************************************
+    Module: shell.h
+    Author: Brennan Couturier
+
+    Shell loop to manage user interaction
+********************************************************************/
+
+#ifndef SHELL_H
+#define SHELL_H
+
+/********************************************************************
+Loop that reads user input and executes commands
+********************************************************************/
+void run_shell();
+
+#endif/********************************************************************
+    Module: FAT32_disk_management.c
+    Author: Brennan Couturier
+
+    Functions to read/write data on the disk
+********************************************************************/
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <errno.h>
+#include <unistd.h>
+#include <string.h>
+#include <stdbool.h>
+#include <ctype.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+
+#include "../include/FAT32_structs_globals.h"
+#include "../include/FAT32_disk_management.h"
+#include "../include/FAT32_helpers.h"
+
+#pragma region Read_Functions
+
+/********************************************************************
+Reads sizeof(FAT32_BS) bytes from the provided disk image file pointer
+    and puts them into an allocated FAT32_BS struct.
+********************************************************************/
+void read_boot_sector(){
+
+    boot_sector = malloc(sizeof(FAT32_BS));
+    if(boot_sector == NULL){
+        fprintf(stderr, "\nError in read_boot_sector() : Could not allocate space for FAT32_BS struct\n");
+        exit(EXIT_FAILURE);
+    }
+
+    ssize_t bytes_read = read(disk_image_fd, (void*)boot_sector, sizeof(FAT32_BS));
+    if(bytes_read == -1){
+        fprintf(stderr, "\nError in read_boot_sector() : read() returned -1 : %s\n", strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+
+    //Make sure that all the values that need to be 0 are zero. If not, there was a problem reading BS
+    if(boot_sector->BPB_RootEntCnt != 0){
+        fprintf(stderr, "\nError in read_boot_sector() : Expected 0 but value is non-zero : BPB_RootEntCnt - %#x\n",
+                        boot_sector->BPB_RootEntCnt);
+        exit(EXIT_FAILURE);
+    }
+    if(boot_sector->BPB_TotSec16 != 0){
+        fprintf(stderr, "\nError in read_boot_sector() : Expected 0 but value is non-zero : BPB_TotSec16 - %#x\n",
+                        boot_sector->BPB_TotSec16);
+        exit(EXIT_FAILURE);
+    }
+    if(boot_sector->BPB_FATSz16 != 0){
+        fprintf(stderr, "\nError in read_boot_sector() : Expected 0 but value is non-zero : BPB_FATSz16 - %#x\n",
+                        boot_sector->BPB_FATSz16);
+        exit(EXIT_FAILURE);
+    }
+    
+    //Check signatures to ensure proper read
+    if(boot_sector->BS_SigA != 0x55 || boot_sector->BS_SigB != 0xAA){
+        fprintf(stderr, "\nError in read_boot_sector() : Bad signature : BS_SigA(0x55) was read as %#x : BS_SigB(0xAA) was read as %#x\n",
+                        boot_sector->BS_SigA, boot_sector->BS_SigB);
+        exit(EXIT_FAILURE);
+    }
+
+}
+
+/********************************************************************
+Reads the FSInfo data into an allocated FAT32_FSInfo struct
+********************************************************************/
+void read_FS_info(){
+
+    fs_info_sector = malloc(sizeof(FAT32_FSInfo));
+    if(fs_info_sector == NULL){
+        fprintf(stderr, "\nError in read_FS_info() : Could not allocate space for FAT32_FSInfo struct\n");
+        exit(EXIT_FAILURE);
+    }
+    
+    ssize_t bytes_read = read(disk_image_fd, (void*)fs_info_sector, sizeof(FAT32_FSInfo));
+    if(bytes_read == -1){
+        fprintf(stderr, "\nError in read_FS_info() : read() returned -1 : %s\n", strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+
+    //Check signature to ensure successful read
+    if(fs_info_sector->FSI_LeadSig != 0x41615252){
+        fprintf(stderr, "\nError in read_FS_info() : Bad signature : FSI_LeadSig(0x41615252) was read as %#x\n",
+                        fs_info_sector->FSI_LeadSig);
+        exit(EXIT_FAILURE);
+    }
+    if(fs_info_sector->FSI_StrucSig != 0x61417272){
+        fprintf(stderr, "\nError in read_FS_info() : Bad signature : FSI_LeadSig(0x61417272) was read as %#x\n",
+                        fs_info_sector->FSI_StrucSig);
+        exit(EXIT_FAILURE);
+    }
+    if(fs_info_sector->FSI_TrailSig != 0xAA550000){
+        fprintf(stderr, "\nError in read_FS_info() : Bad signature : FSI_LeadSig(0xAA550000) was read as %#x\n",
+                        fs_info_sector->FSI_TrailSig);
+        exit(EXIT_FAILURE);
+    }
+
+    //NULL terminate the label string
+    boot_sector->BS_VolLab[BS_VolLab_LENGTH] = '\0';
+    
+}
+
+/********************************************************************
+Reads the root directory into an allocated FAT32_Directory_Entry struct
+********************************************************************/
+void read_root_directory(){
+
+    uint32_t root_dir_cluster_number;
+    file_cluster_node* chain_head;
+    uint8_t* bulk_data_buffer;
+
+    //Allocate space for root directory
+    root_directory = malloc(sizeof(FAT32_Directory_Entry));
+    if(root_directory == NULL){
+        fprintf(stderr, "\nError in read_root_directory() : Could not allocate space for root directory\n");
+        exit(EXIT_FAILURE);
+    }
+
+    //Read the cluster into a buffer
+    root_dir_cluster_number = boot_sector->BPB_RootClus;
+    chain_head = build_clusterchain(root_dir_cluster_number);
+    bulk_data_buffer = read_clusterchain(chain_head);
+
+    //Copy the buffer into the allocated struct
+    root_directory = (FAT32_Directory_Entry*)(&bulk_data_buffer[0]);
+    current_directory_cluster = root_dir_cluster_number;
+    
+}
+
+/********************************************************************
+Searches the current directory for a file with the provided name
+    If the file is found, write the clusterchain to a file in memory
+********************************************************************/
+void download_file(char* file_name){
+
+    int file_descriptor;
+    uint8_t* directory_data = read_clusterchain(build_clusterchain(current_directory_cluster));
+    FAT32_Directory_Entry* dir = (FAT32_Directory_Entry*)&directory_data[0];
+
+    //Search for the file in the current directory
+    bool continue_parsing = true;
+    bool found_file = false;
+    
+    while(continue_parsing){
+
+        //check some FAT32-specific things
+        if(dir->DIR_Name[0] == 0x00){
+            //No more entries, stop searching
+            continue_parsing = false;
+            continue;
+        }
+        if(dir->DIR_Name[0] == 0xE5){
+            //empty entry, skip it
+            dir++;
+            continue;
+        }
+
+        //format dir->DIR_Name to look like user input (name.extension)
+        char trimmed_name[strlen(dir->DIR_Name) + 1];
+        trim_file_name(dir->DIR_Name, trimmed_name);
+
+        if(strcmp(file_name, trimmed_name) == 0 && dir->DIR_Attr != 0x10){
+            continue_parsing = false;
+            found_file = true;
+            continue;
+        }
+
+        dir++;
+    }
+
+    if(found_file){
+
+        uint32_t file_cluster_number = (dir->DIR_FstClusHI << 16) | dir->DIR_FstClusLO;
+        uint8_t* file_data = read_clusterchain(build_clusterchain(file_cluster_number));
+
+        char path[strlen(file_name) + strlen(FILE_OUTPUT_FOLDER)];
+        sprintf(path, "%s%s", FILE_OUTPUT_FOLDER, file_name);
+
+        file_descriptor = open(path, O_CREAT | O_TRUNC | O_WRONLY, 0777);
+        if(file_descriptor == -1){
+            fprintf(stderr, "\nError in download_file() : Could not create output file : %s\n", strerror(errno));
+        }else{
+            write(file_descriptor, (void*)file_data, dir->DIR_FileSize);
+            close(file_descriptor);
+            fprintf(stdout, "Downloaded %d bytes to %s\n", dir->DIR_FileSize, path);
+        }
+        free(file_data);
+    }else{
+        fprintf(stderr, "Error: No such file\n");
+    }
+}
+
+#pragma endregion Read_Functions
+
+#pragma region Set_Functions
+
+/********************************************************************
+Searches the current directory for the specified directory
+    If it exists, get its cluster number and set the global variable
+********************************************************************/
+void change_directory(char* destination){
+
+    uint8_t* directory_data = read_clusterchain(build_clusterchain(current_directory_cluster));
+    FAT32_Directory_Entry* dir = (FAT32_Directory_Entry*)&directory_data[0];
+
+    bool continue_parsing = true;
+    bool found_folder = false;
+    while(continue_parsing){
+
+        //Check some FAT32-specific values
+        if(dir->DIR_Name[0] == 0x00){
+            //No more directory entries to search
+            continue_parsing = false;
+            continue;
+        }
+        if(dir->DIR_Name[0] == 0xE5){
+            //Entry is empty, skip it
+            dir++;
+            continue;
+        }
+
+        //Remove whitespaces from dir->DIR_Name
+        int num_characters = 0;
+        int j;
+        while(dir->DIR_Name[num_characters] != ' '){
+            num_characters++;
+        }
+        char no_space_name[num_characters];
+        for(j = 0; j < num_characters; j++){
+            no_space_name[j] = dir->DIR_Name[j];
+        }
+        no_space_name[j] = '\0';
+
+        //Special case for Japanese characters. 0x05 means the character is actually 0xE5
+        if(dir->DIR_Name[0] == 0x05){
+            no_space_name[0] = 0xE5;
+        }
+
+        //Compare no_space_name to destination, and make sure it is a directory
+        if((strcmp(no_space_name, destination) == 0) && (dir->DIR_Attr == 0x10)){
+
+            found_folder = true;
+            continue_parsing = false;
+            
+            //If destination is '.', do nothing
+            if(strcmp(destination, ".") == 0){
+                continue;
+            }
+
+            //Build the new cluster number
+            uint32_t new_cluster_number = (dir->DIR_FstClusHI << 16) | dir->DIR_FstClusLO;
+
+            //If destination is '..' and the value there is 0, '..' is the root directory
+            if(strcmp(destination, "..") == 0 && new_cluster_number == 0){
+                new_cluster_number = boot_sector->BPB_RootClus;
+            }
+
+            current_directory_cluster = new_cluster_number;
+        }
+
+        dir++;
+    }
+    
+    if(!found_folder){
+        fprintf(stderr, "Error: No such directory\n");
+    }
+
+}
+
+#pragma endregion Set_Functions/********************************************************************
+    Module: FAT32_helpers.h
+    Author: Brennan Couturier
+
+    Extra functions to perform tedious calculations
+********************************************************************/
+
+#include <stdlib.h>
+#include <stdio.h>
+#include <unistd.h>
+#include <inttypes.h>
+#include <string.h>
+
+#include "../include/FAT32_structs_globals.h"
+#include "../include/FAT32_helpers.h"
+
+#pragma region Get_Functions
+
+/********************************************************************
+Calculate how many root directory sectors there are. If FAT32 this 
+	will be 0, otherwise we should stop the program because we
+	aren't operating on FAT12/16.
+********************************************************************/
+uint16_t get_root_dir_sectors(){
+
+    uint16_t root_entry_count = boot_sector->BPB_RootEntCnt;
+    uint16_t bytes_per_sector = boot_sector->BPB_BytesPerSec;
+
+    uint16_t root_dir_sectors = ((root_entry_count * 32) + (bytes_per_sector - 1)) / bytes_per_sector;
+
+    return root_dir_sectors;
+
+}
+
+/********************************************************************
+Calculate the sector number of the first data sector relative
+	to the sector that contains the BPB
+********************************************************************/
+uint32_t get_first_data_sector(){
+
+    uint16_t root_dir_sectors = get_root_dir_sectors();
+    uint16_t reserved_sector_count = boot_sector->BPB_RsvdSecCnt;
+    uint8_t num_FATs = boot_sector->BPB_NumFATs;
+    uint32_t FAT_size = boot_sector->BPB_FATSz32;
+
+    uint32_t first_data_sector = reserved_sector_count + (num_FATs * FAT_size) + root_dir_sectors;
+
+    return first_data_sector;
+
+}
+
+/********************************************************************
+Calculate the first sector of a given cluster number
+********************************************************************/
+uint32_t get_first_sector_of_cluster(uint32_t cluster_number){
+
+    uint32_t first_data_sector = get_first_data_sector();
+    uint8_t sectors_per_cluster = boot_sector->BPB_SecPerClus;
+
+    uint32_t first_sector_of_cluster = ((cluster_number - 2) * sectors_per_cluster) + first_data_sector;
+
+    return first_sector_of_cluster;
+
+}
+
+/********************************************************************
+Calculate the number of sectors in the data region of the volume
+********************************************************************/
+uint32_t get_num_data_region_sectors(){
+
+    uint16_t root_dir_sectors = get_root_dir_sectors();
+    uint32_t total_sectors = boot_sector->BPB_TotSec32;
+    uint16_t reserved_sector_count = boot_sector->BPB_RsvdSecCnt;
+    uint8_t num_FATs = boot_sector->BPB_NumFATs;
+    uint32_t FAT_size = boot_sector->BPB_FATSz32;
+    
+    uint32_t num_data_region_sectors = total_sectors - (reserved_sector_count + (num_FATs * FAT_size) + root_dir_sectors);
+
+    return num_data_region_sectors;
+
+}
+
+/********************************************************************
+Calculate the number of data clusters in total starting at cluster 2
+    This computation rounds down
+********************************************************************/
+uint32_t get_num_clusters(){
+
+    uint32_t num_data_region_sectors = get_num_data_region_sectors();
+    uint8_t sectors_per_cluster = boot_sector->BPB_SecPerClus;
+
+    uint32_t num_clusters = num_data_region_sectors / sectors_per_cluster;
+
+    return num_clusters;
+
+}
+
+/********************************************************************
+Calculate FAT entry number for given cluster number N
+	This is the sector number of the FAT sector that contains the 
+	entry for cluster N in the first FAT
+********************************************************************/
+uint32_t get_FAT_sector_number_for_cluster(uint32_t cluster_number){
+
+    uint32_t FAT_offset = cluster_number * 4;
+    uint16_t reserved_sector_count = boot_sector->BPB_RsvdSecCnt;
+    uint16_t bytes_per_sector = boot_sector->BPB_BytesPerSec;
+
+    uint32_t FAT_sector_number_for_cluster = reserved_sector_count + (FAT_offset / bytes_per_sector);
+
+    return FAT_sector_number_for_cluster;
+
+}
+
+/********************************************************************
+Calculate FAT entry offset value for given cluster number
+********************************************************************/
+uint32_t get_FAT_entry_offset_for_cluster(uint32_t cluster_number){
+
+    uint32_t FAT_offset = cluster_number * 4;
+    uint16_t bytes_per_sector = boot_sector->BPB_BytesPerSec;
+
+    uint32_t FAT_entry_offset_for_cluster = FAT_offset % bytes_per_sector; //Remainder of FAT_offset / bytes_per_sector
+
+    return FAT_entry_offset_for_cluster;
+
+}
+
+/********************************************************************
+Fetch the contents of the given cluster's FAT entry
+********************************************************************/
+uint32_t get_FAT_entry_contents(uint32_t cluster_number){
+
+    ssize_t bytes_read;
+    uint32_t FAT_entry;
+    uint32_t FAT_sector_number = get_FAT_sector_number_for_cluster(cluster_number);
+    uint32_t FAT_entry_offset = get_FAT_entry_offset_for_cluster(cluster_number);
+    __off_t FAT_entry_byte_location = (FAT_sector_number * boot_sector->BPB_BytesPerSec) + FAT_entry_offset;
+
+    lseek(disk_image_fd, FAT_entry_byte_location, SEEK_SET);
+    bytes_read = read(disk_image_fd, (void*)(&FAT_entry), sizeof(uint32_t));
+    if(bytes_read == -1){
+        fprintf(stderr, "\nError in get_FAT_entry_contents() : Read returned -1\n");
+        exit(EXIT_FAILURE);
+    }
+
+    //The actual entry is only 28-bits, so mask out the high four bits
+    return FAT_entry & FAT_ENTRY_MASK;
+
+}
+
+/********************************************************************
+Returns a string representing the FAT version we're using
+********************************************************************/
+char* get_FAT_type(){
+
+    uint32_t count_of_clusters = get_num_clusters();
+    char* return_value = "";
+
+    if(count_of_clusters < 4085){
+        //volume is FAT12
+        return_value = "FAT12";
+    }else if(count_of_clusters < 65525){
+        //volume is FAT16
+        return_value = "FAT16";
+    }else{
+        //volume is FAT32
+        return_value = "FAT32";
+    }
+
+    return return_value;
+
+}
+
+#pragma endregion Get_Functions
+
+#pragma region Value_Check_Functions
+
+/********************************************************************
+Checks if the FAT entry is EOC or not
+********************************************************************/
+bool is_FAT_entry_EOC(uint32_t FAT_entry){
+
+    if(FAT_entry >= EOC_LOW_BOUND){
+        return true;
+    }
+
+    return false;
+
+}
+
+#pragma endregion Value_Check_Functions
+
+#pragma region Clusterchain_Functions
+
+file_cluster_node* build_clusterchain(uint32_t cluster_number_in){
+
+    uint32_t FAT_entry;
+    bool is_EOC;
+    
+    file_cluster_node* to_return = malloc(sizeof(file_cluster_node));
+    if(to_return == NULL){
+        fprintf(stderr, "\nError in build_clusterchain() : Could not allocate space for first cluster node\n");
+        exit(EXIT_FAILURE);
+    }
+
+    to_return->cluster_number = cluster_number_in;
+    to_return->next = NULL;
+
+    file_cluster_node* curr = to_return;
+
+    FAT_entry = get_FAT_entry_contents(to_return->cluster_number);
+    is_EOC = is_FAT_entry_EOC(FAT_entry);
+    while(!is_EOC){
+        //FAT entry is the next cluster number
+        file_cluster_node* to_add = malloc(sizeof(file_cluster_node));
+        if(to_add == NULL){
+            fprintf(stderr, "\nError in build_clusterchain() : Could not allocate space for to_add cluster node\n");
+            exit(EXIT_FAILURE);
+        }
+
+        to_add->cluster_number = FAT_entry;
+        to_add->next = NULL;
+        curr->next = to_add;
+        curr = curr->next;
+
+        FAT_entry = get_FAT_entry_contents(curr->cluster_number);
+        is_EOC = is_FAT_entry_EOC(FAT_entry);
+    }
+
+    return to_return;
+
+}
+
+/********************************************************************
+Print out all the cluster numbers in the chain, ending with EOC
+********************************************************************/
+void print_clusterchain(file_cluster_node* chain_head){
+
+    file_cluster_node* curr = chain_head;
+    while(curr != NULL){
+        fprintf(stdout, "%d->", curr->cluster_number);
+        curr = curr->next;
+    }
+    fprintf(stdout, "EOC\n");
+
+}
+
+/********************************************************************
+Read all the clusters into one bit char array (byte array), to be
+	formatted by the caller
+********************************************************************/
+uint8_t* read_clusterchain(file_cluster_node* chain_head){
+
+    //Declare variables
+    file_cluster_node* curr = chain_head;
+    int num_nodes = 0;
+    int cluster_offset = 0;
+
+    size_t cluster_size = boot_sector->BPB_BytesPerSec * boot_sector->BPB_SecPerClus;
+    ssize_t bytes_read;
+    uint8_t* bulk_buffer;
+    __off_t byte_offset;
+
+
+    //count number of nodes in chain
+    while(curr != NULL){
+        num_nodes++;
+        curr = curr->next;
+    }
+    curr = chain_head;
+
+    //Allocate the bulk buffer
+    bulk_buffer = malloc(cluster_size * num_nodes);
+    if(bulk_buffer == NULL){
+        fprintf(stderr, "\nError in read_clusterchain() : Could not allocate space for bulk buffer\n");
+        exit(EXIT_FAILURE);
+    }
+
+    //Go through each cluster in the chain, move their contents into the bulk buffer
+    while(curr != NULL){
+        byte_offset = get_first_sector_of_cluster(curr->cluster_number) * boot_sector->BPB_BytesPerSec;
+        lseek(disk_image_fd, byte_offset, SEEK_SET);
+
+        bytes_read = read(disk_image_fd, (void*)bulk_buffer + (cluster_size * cluster_offset), cluster_size);
+        if(bytes_read == -1){
+            fprintf(stderr, "\nError in read_clusterchain() : Read returned -1\n");
+            exit(EXIT_FAILURE);
+        }
+
+        cluster_offset++;
+        curr = curr->next;
+    }
+
+    free_clusterchain(chain_head);
+
+    return bulk_buffer;
+
+}
+
+/********************************************************************
+Free all the nodes in the clusterchain
+********************************************************************/
+void free_clusterchain(file_cluster_node* chain_head){
+
+    file_cluster_node* tmp;
+
+    while(chain_head != NULL){
+        tmp = chain_head;
+        chain_head = chain_head->next;
+        free(tmp);
+    }
+
+}
+
+#pragma endregion Clusterchain_Functions
+
+#pragma region String_Trim_Functions
+
+/********************************************************************
+Gets rid of all the trailing whitespace in the file name
+********************************************************************/
+void trim_directory_name(char* name_in, char* name_out){
+
+    strncpy(name_out, name_in, strlen(name_in));
+
+    int i = 0;
+    while(name_out[i] != ' '){
+        i++;
+    }
+    name_out[i] = '\0';
+}
+
+/********************************************************************
+Gets rid of the whitespace between the file name and the extension,
+	replaces it with 1 '.'
+********************************************************************/
+void trim_file_name(char* name_in, char* name_out){
+
+    char name[strlen(name_in) - 1];
+    strncpy(name, name_in, strlen(name_in) - 1);
+
+    int i;
+    //Get the file name
+    int file_name_length = 0;
+    while(name[file_name_length] != ' '){
+        file_name_length++;
+    }
+    char file_name[file_name_length];
+    file_name[file_name_length] = '\0';
+
+    for(i = 0; i < file_name_length; i++){
+        file_name[i] = name[i];
+    }
+
+    //Get extension
+    i = strlen(name) - 1;
+    int extension_length = 0;
+    while(name[i] != ' '){
+        i--;
+        extension_length++;
+    }
+    i++;
+
+    char extension[extension_length];
+    extension[extension_length] = '\0';
+
+    int j;
+    for(j = 0; j < extension_length; j++){
+        extension[j] = name[i];
+        i++;
+    }
+
+    //Combine the two
+    char combined[file_name_length + extension_length + 1];
+    strncpy(combined, file_name, file_name_length);
+    strncpy(combined + file_name_length, ".", 1);
+    strncpy(combined + file_name_length + 1, extension, extension_length);
+    combined[file_name_length + extension_length + 1] = '\0';
+    
+    strncpy(name_out, combined, strlen(combined) + 1);
+}
+
+#pragma endregion String_Trim_Functions/********************************************************************
+    Module: FAT32_io.c
+    Author: Brennan Couturier
+
+    Functions for opening/closing files and printing information
+********************************************************************/
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <errno.h>
+#include <unistd.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <fcntl.h>
+#include <string.h>
+
+#include "../include/FAT32_io.h"
+#include "../include/FAT32_helpers.h"
+#include "../include/FAT32_structs_globals.h"
+
+#define _GNU_SOURCE
+
+
+#pragma region File_Descriptor_Functions
+
+/********************************************************************
+Open the formatted FAT32 disk image for reading and writing
+********************************************************************/
+void open_disk_image(char* disk_image_path_in){
+
+    disk_image_path = disk_image_path_in;
+
+    disk_image_fd = open(disk_image_path, O_RDWR);
+    if(disk_image_fd == -1){
+        fprintf(stderr, "\nError in open_disk_image() : Failed to open %s : %s\n", disk_image_path, strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+
+    fprintf(stdout, "Opened %s for reading and writing\n", disk_image_path);
+
+}
+
+/********************************************************************
+Closes the disk image file descriptor that was opened at the beginning
+********************************************************************/
+void close_disk_image(){
+
+    int err = close(disk_image_fd);
+    if(err == -1){
+        fprintf(stdout, "Error in close_disk_image() : Could not close file descriptor : %s\n", strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+
+    fprintf(stdout, "Closed %s\n", disk_image_path);
+
+}
+
+#pragma endregion File_Descriptor_Functions
+
+#pragma region Printing_Functions
+
+/********************************************************************
+Prints out some values contained in the boot sector to a file
+	in the debug directory
+********************************************************************/
+void print_boot_sector_info(){
+
+    /*
+    char* boot_sector_output_filename = "./debug/boot_sector_output.txt";
+
+    FILE* boot_sector_output_file = fopen(boot_sector_output_filename, "w+");
+    if(boot_sector_output_file == NULL){
+        fprintf(stderr, "\nError in print_boot_sector() : Could not open %s : %s\n", 
+                boot_sector_output_filename, strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+    */
+    
+    //Device info
+    char* OEM_name = boot_sector->BS_OEMName;
+    char* label = boot_sector->BS_VolLab;
+    char* file_system_type = get_FAT_type();
+    uint8_t media_type = boot_sector->BPB_Media;
+    long long size = (long long)boot_sector->BPB_BytesPerSec * (long long)boot_sector->BPB_TotSec32;
+    uint8_t drive_number = boot_sector->BS_DrvNum;
+
+    //Geometry
+    uint16_t bytes_per_sector = boot_sector->BPB_BytesPerSec;
+    uint8_t sectors_per_cluster = boot_sector->BPB_SecPerClus;
+    uint32_t total_sectors = boot_sector->BPB_TotSec32;
+    uint16_t sectors_per_track = boot_sector->BPB_SecPerTrk;
+    uint16_t heads = boot_sector->BPB_NumHeads;
+    uint32_t hidden_sectors = boot_sector->BPB_HiddSec;
+
+    //FS Info
+    char* volume_id = root_directory->DIR_Name;
+    uint8_t version_high = boot_sector->BPB_FSVerHigh;
+    uint8_t version_low = boot_sector->BPB_FSVerLow;
+    uint16_t reserved_sectors = boot_sector->BPB_RsvdSecCnt;
+    uint8_t number_of_FATs = boot_sector->BPB_NumFATs;
+    uint32_t FAT_size = boot_sector->BPB_FATSz32;
+    char* mirrored_FAT = (((boot_sector->BPB_ExtFlags & 0x80) == 0) ? "0 (yes)" : "1 (no)"); //0x80 is just a mask used to isolate bit 7
+    uint16_t boot_sector_backup_sector_no = boot_sector->BPB_BkBootSec;
+
+    fprintf(stdout, "%s\n", root_directory->DIR_Name);
+
+    //Print all that info
+    fprintf(stdout, 
+        "---- Device Info ----\n"
+        " OEM Name: %s\n"
+        " Label: %s\n"
+        " File System Type: %s\n"
+        " Media Type: %#x\n"
+        " Size: %lld\n"
+        " Drive Number: %d\n\n"
+        "--- Geometry ---\n"
+        " Bytes per Sector: %d\n"
+        " Sectors per Cluster: %d\n"
+        " Total Sectors: %d\n"
+        " Geom: Sectors per Track: %d\n"
+        " Geom: Heads: %d\n"
+        " Hidden Sectors: %d\n\n"
+        "--- FS Info ---\n"
+        " Volume ID: %s\n"
+        " Version: %d:%d\n"
+        " Reserved Sectors: %d\n"
+        " Number of FATs: %d\n"
+        " FAT Size: %d\n"
+        " Mirrored FAT: %s\n"
+        " Boot Sector Backup Sector No: %d\n",
+        OEM_name, label, file_system_type, media_type,
+        size, drive_number, bytes_per_sector, sectors_per_cluster,
+        total_sectors, sectors_per_track, heads, hidden_sectors,
+        volume_id, version_high, version_low, reserved_sectors, number_of_FATs,
+        FAT_size, mirrored_FAT, boot_sector_backup_sector_no
+    );
+
+    /*
+    int err = fclose(boot_sector_output_file);
+    if(err == EOF){
+        fprintf(stderr, "\nError in print_boot_sector() : Could not close %s : %s\n", 
+                boot_sector_output_filename, strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+    */
+
+}
+
+/********************************************************************
+Prints out information about the root directory, for debugging
+********************************************************************/
+void print_root_directory(){
+
+    uint8_t dir_attr = root_directory->DIR_Attr;
+    uint16_t crt_date = root_directory->DIR_CrtDate;
+    uint16_t crt_time = root_directory->DIR_CrtTime;
+    uint32_t file_size = root_directory->DIR_FileSize;
+    uint16_t fst_clus_hi = root_directory->DIR_FstClusHI;
+    uint16_t fst_clus_lo = root_directory->DIR_FstClusLO;
+    uint16_t lst_acc_date = root_directory->DIR_LstAccDate;
+    char* dir_name = root_directory->DIR_Name;
+    uint8_t ntres = root_directory->DIR_NTRes;
+    uint16_t wrt_date = root_directory->DIR_WrtDate;
+    uint16_t wrt_time = root_directory->DIR_WrtTime;
+
+    fprintf(stdout,
+        "dir_attr: %#x\n"
+        "crt_date: %d\n"
+        "crt_time: %d\n"
+        "file_size: %d\n"
+        "fst_clus_hi: %d\n"
+        "fst_clus_lo: %d\n"
+        "lst_acc_date: %d\n"
+        "dir_name: %s\n"
+        "ntres: %d\n"
+        "wrt_date: %d\n"
+        "wrt_time: %d\n",
+        dir_attr, crt_date, crt_time,
+        file_size, fst_clus_hi, fst_clus_lo,
+        lst_acc_date, dir_name, ntres,
+        wrt_date, wrt_time
+    );
+
+}
+
+/********************************************************************
+Prints out information about the current directory and all the files
+    and subfolders in it
+********************************************************************/
+void print_current_directory(){
+
+    fprintf(stdout, "\nDIRECTORY LISTING\n");
+    fprintf(stdout, "Volume ID: %s\n\n", root_directory->DIR_Name);
+
+    uint8_t* data_buffer = read_clusterchain(build_clusterchain(current_directory_cluster));
+    FAT32_Directory_Entry* dir = (FAT32_Directory_Entry*)&data_buffer[0];
+    int dirs_parsed = 0;
+
+    //Do not print the first 2 entries of the root directory, they are garbage
+    if(current_directory_cluster == boot_sector->BPB_RootClus){
+        dir++;
+        dir++;
+        dirs_parsed = 2;
+    }
+
+    bool continue_parsing = true;
+    while(continue_parsing){
+        if(dir->DIR_Name[0] == 0x00){
+            //No more entries
+            continue_parsing = false;
+            continue;
+        }
+        if(dir->DIR_Name[0] == 0xE5){
+            //An empty entry
+            continue;
+        }
+        if(dir->DIR_Name[0] == 0x05){
+            //Byte is actually 0xE5
+            dir->DIR_Name[0] = 0xE5;
+        }
+        char dir_name[strlen(dir->DIR_Name) + 1];
+        if(dir->DIR_Attr == 0x10){
+            //entry is a directory
+            trim_directory_name(dir->DIR_Name, dir_name);
+            fprintf(stdout, "<%s>\t\t%d\n", dir_name, dir->DIR_FileSize);
+        }else{
+            trim_file_name(dir->DIR_Name, dir_name);
+            fprintf(stdout, "%s\t\t%d\n", dir_name, dir->DIR_FileSize);
+        }
+
+
+        dir++;
+        dirs_parsed++;
+
+        //print the . and .. entries, then skip every other entry (they are garbage)
+        if(dirs_parsed >= 2){
+            dir++;
+        }
+    }
+
+    //prnt free space
+    long long bytes_free = ((long long)fs_info_sector->FSI_Free_Count) * ((long)boot_sector->BPB_SecPerClus * (long)boot_sector->BPB_BytesPerSec);
+    fprintf(stdout, "---Bytes Free: %lld\n", bytes_free);
+
+    //print done message
+    fprintf(stdout, "---DONE\n");
+}
+
+#pragma endregion Printing_Functions/********************************************************************
+    Module: main.c
+    Author: Brennan Couturier
+
+    Program that starts the shell
+********************************************************************/
+
+#include <stdio.h>
+#include <stdlib.h>
+
+#include "../include/FAT32_io.h"
+#include "../include/FAT32_disk_management.h"
+#include "../include/FAT32_structs_globals.h"
+#include "../include/shell.h"
+
+int main(int argc, char* argv[]){
+
+
+    //Check if enough arguments were supplied
+    if(argc < 2){
+        fprintf(stderr, "Usage: \"%s <disk image file>\"\n", argv[0]);
+        exit(EXIT_FAILURE);
+    }
+    
+    //open the disk image for reading and writing
+    open_disk_image(argv[1]);
+
+    //Read the important stuff
+    read_boot_sector();
+    read_FS_info();
+    read_root_directory();
+
+    //go into the shell loop
+    run_shell();
+
+    //Free memory and close files
+    free(boot_sector);
+    free(fs_info_sector);
+    free(root_directory);
+
+    close_disk_image();
+
+    return EXIT_SUCCESS;
+}/********************************************************************
+    Module: shell.h
+    Author: Brennan Couturier
+
+    Shell loop to manage user interaction
+********************************************************************/
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
+#include <string.h>
+#include <ctype.h>
+
+#include "../include/shell.h"
+#include "../include/FAT32_io.h"
+#include "../include/FAT32_disk_management.h"
+
+#define BUFFER_SIZE 256
+#define CMD_INFO "INFO"
+#define CMD_DIR "DIR"
+#define CMD_CD "CD"
+#define CMD_GET "GET"
+#define CMD_PUT "PUT"
+#define CMD_EXIT "EXIT"
+
+/********************************************************************
+Loop that reads user input and executes commands
+********************************************************************/
+void run_shell(){
+
+    int i;
+    bool running = true;
+    char input[BUFFER_SIZE];
+
+    while(running){
+
+        //print prompt
+        fprintf(stdout, "> ");
+
+        //read user input
+        if(fgets(input, BUFFER_SIZE, stdin) == NULL){
+            fprintf(stderr, "\nError in run_shell() : fgets() returned NULL\n");
+            running = false;
+            continue; //skip the rest of the loop
+        }
+
+        //remove newline and make input uppercase
+        input[strlen(input) - 1] = '\0';
+        for(i = 0; i < strlen(input) + 1; i++){
+            input[i] = toupper(input[i]);
+        }
+
+        //check input
+        if(strncmp(input, CMD_EXIT , strlen(CMD_EXIT )) == 0){
+
+            running = false;
+            continue;
+
+        }else if(strncmp(input, CMD_CD , strlen(CMD_CD)) == 0){
+
+            //Tokenize input
+            char* save_ptr;
+            __strtok_r(input, " ", &save_ptr); //diregard first token
+            char* destination = __strtok_r(NULL, " ", &save_ptr);
+
+            if(destination == NULL){
+                fprintf(stderr, "Usage: \"cd <directory>\"\n");
+            }else{
+                change_directory(destination);
+            }
+            
+        }else if(strncmp(input, CMD_DIR , strlen(CMD_DIR )) == 0){
+
+            print_current_directory();
+            
+        }else if(strncmp(input, CMD_INFO , strlen(CMD_INFO )) == 0){
+
+            print_boot_sector_info();
+            
+        }else if(strncmp(input, CMD_GET , strlen(CMD_GET )) == 0){
+    
+            //Tokenize input
+            char* save_ptr;
+            __strtok_r(input, " ", &save_ptr); //diregard first token
+            char* file_name = __strtok_r(NULL, " ", &save_ptr);
+
+            if(file_name == NULL){
+                fprintf(stderr, "Usage: \"get <file name>\"\n");
+            }else{
+                download_file(file_name);
+            }
+            
+        }else if(strncmp(input, CMD_PUT , strlen(CMD_PUT )) == 0){
+
+
+            
+        }else{
+            
+            fprintf(stderr, "\nCommand not found\n");
+
+        }
+
+    }
+
+    fprintf(stdout, "\nExiting...\n");
+
+}
