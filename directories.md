@@ -21,3 +21,7 @@ Used to store the FAT32 diskimage used by the program
 # The bin directory
 
 Used to hold the compiled binaries (the executable program)
+
+# The files directory
+
+Used as a landing ground for all the files downloaded from the disk image
