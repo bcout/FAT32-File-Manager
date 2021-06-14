@@ -68,17 +68,17 @@ void run_shell(){
             }else{
                 change_directory(destination);
             }
-            
+
         }else if(strncmp(input, CMD_DIR , strlen(CMD_DIR )) == 0){
 
             print_current_directory();
-            
+
         }else if(strncmp(input, CMD_INFO , strlen(CMD_INFO )) == 0){
 
             print_boot_sector_info();
-            
+
         }else if(strncmp(input, CMD_GET , strlen(CMD_GET )) == 0){
-    
+
             //Tokenize input
             char* save_ptr;
             __strtok_r(input, " ", &save_ptr); //diregard first token
@@ -89,13 +89,13 @@ void run_shell(){
             }else{
                 download_file(file_name);
             }
-            
+
         }else if(strncmp(input, CMD_PUT , strlen(CMD_PUT )) == 0){
 
+            fprintf(stderr, "\nCommand not implemented\n");
 
-            
         }else{
-            
+
             fprintf(stderr, "\nCommand not found\n");
 
         }
